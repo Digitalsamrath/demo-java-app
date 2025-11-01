@@ -78,36 +78,51 @@ pipeline {
         }
         */
 
-        stage('6. Build Docker Image') {
+        stage('3. Build Docker Image') { // Renumbered from 6
             steps {
                 echo "Building Docker Image..."
-                // This uses the Dockerfile in your repo
-                sh "docker build -t ${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER} ."
-                sh "docker tag ${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER} ${DOCKER_HUB_USER}/my-java-app:latest"
-            }
-        }
-
-        stage('7. Push to Docker Hub') {
-            steps {
-                echo "Pushing image to Docker Hub..."
-                // 'dockerhub-creds' is the ID we'll create in Jenkins
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                    sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
-                    sh "docker push ${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER}"
-                    sh "docker push ${DOCKER_HUB_USER}/my-java-app:latest"
+                script {
+                    // This uses the Docker Pipeline plugin's 'docker.build()' command
+                    def customImage = docker.build("${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER}", ".")
+                    customImage.tag("${DOCKER_HUB_USER}/my-java-app:latest")
                 }
             }
         }
 
-        stage('8. Deploy (Local Simulation)') {
+        stage('4. Push to Docker Hub') { // Renumbered from 7
+            steps {
+                echo "Pushing image to Docker Hub..."
+                script {
+                    // This tells the plugin to use our 'dockerhub-creds' for the Docker Hub registry
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-creds') {
+                        
+                        // Push the build-number tag
+                        docker.image("${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER}").push()
+                        
+                        // Push the 'latest' tag
+                        docker.image("${DOCKER_HUB_USER}/my-java-app:latest").push()
+                    }
+                }
+            }
+        }
+
+        stage('5. Deploy (Local Simulation)') { // Renumbered from 8
             steps {
                 echo "Deploying container locally..."
-                sh "docker stop my-app || true" 
-                sh "docker rm my-app || true"   
-                
-                // --- IMPORTANT ---
-                // We deploy to port 8090 because Artifactory will be on 8081
-                sh "docker run -d --name my-app -p 8090:8080 ${DOCKER_HUB_USER}/my-java-app:latest"
+                script {
+                    // We need a 'try/catch' because stopping/removing a container
+                    // that doesn't exist will throw an error.
+                    try {
+                        def oldContainer = docker.container('my-app')
+                        oldContainer.stop()
+                        oldContainer.rm()
+                    } catch (e) {
+                        echo "No old 'my-app' container found. Moving on."
+                    }
+                    
+                    // Now, use the plugin to run the new container
+                    docker.image("${DOCKER_HUB_USER}/my-java-app:latest").run("-d -p 8090:8080 --name my-app")
+                }
             }
         }
     }
