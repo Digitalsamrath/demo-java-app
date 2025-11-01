@@ -7,18 +7,20 @@ pipeline {
     }
 
     environment {
+        /*
         // --- SonarQube Config ---
         SONAR_HOST_URL = "http://sonarqube:9000" // We use the container name, not localhost
         SONAR_TOKEN = credentials('SONAR_TOKEN') // ID from Jenkins Credentials
-        
+        */
         // --- Docker Config ---
-        DOCKER_HUB_USER = "your-dockerhub-username" // <-- 1. UPDATE THIS
-        
+        DOCKER_HUB_USER = "samrath09" 
+        /*
         // --- Artifactory Config ---
         ARTIFACTORY_SERVER = 'artifactory' // ID from Jenkins Global Config
         ARTIFACTORY_REPO = 'libs-release-local'
         APP_NAME = 'demo-java-app'
         APP_VERSION = '1.0.0'
+        */
     }
 
     stages {
@@ -37,6 +39,7 @@ pipeline {
                 sh "mvn clean verify" 
             }
         }
+        /*
 
         stage('3. SonarQube Analysis') {
             steps {
@@ -73,6 +76,7 @@ pipeline {
                 }
             }
         }
+        */
 
         stage('6. Build Docker Image') {
             steps {
@@ -98,8 +102,8 @@ pipeline {
         stage('8. Deploy (Local Simulation)') {
             steps {
                 echo "Deploying container locally..."
-                sh "docker stop my-app || true" // Stop old version, ignore error if it doesn't exist
-                sh "docker rm my-app || true"   // Remove old version
+                sh "docker stop my-app || true" 
+                sh "docker rm my-app || true"   
                 
                 // --- IMPORTANT ---
                 // We deploy to port 8090 because Artifactory will be on 8081
