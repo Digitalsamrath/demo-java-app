@@ -10,7 +10,7 @@ pipeline {
             agent any 
             steps {
                 echo "Fetching code..."
-                checkout scm 
+                git branch: 'main', url: 'https://github.com/Digitalsamrath/demo-java-app.git'
             }
         }
         
@@ -29,6 +29,44 @@ pipeline {
                 stash includes: 'target/surefire-reports/*.xml', name: 'test-reports', allowEmpty: true
             }
         }
+        /*
+
+        stage('3. SonarQube Analysis') {
+            steps {
+                echo "Running SonarQube scan..."
+                // The pom.xml has most settings; this just passes the server URL and token
+                sh "mvn sonar:sonar -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.login=${SONAR_TOKEN}"
+            }
+        }
+
+        stage('4. Quality Gate') {
+            steps {
+                echo "Checking SonarQube Quality Gate..."
+                // This pauses the pipeline and waits for Sonar's analysis
+                // It will fail the build if the code quality is bad
+                timeout(time: 5, unit: 'MINUTES') { 
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        
+        stage('5. Publish to Artifactory') {
+            steps {
+                echo "Passed quality checks. Publishing JAR to Artifactory..."
+                script {
+                    // We need the Artifactory Plugin for this 'Artifactory.server' part
+                    def server = Artifactory.server "${ARTIFACTORY_SERVER}"
+                    def uploadSpec = """{
+                        "files": [{
+                            "pattern": "target/*.jar",
+                            "target": "${ARTIFACTORY_REPO}/${APP_NAME}/${APP_VERSION}/"
+                        }]
+                    }"""
+                    server.upload(uploadSpec)
+                }
+            }
+        }
+        */
         
         stage('3. Build Docker Image') {
             agent {
