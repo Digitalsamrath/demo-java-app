@@ -138,7 +138,7 @@ pipeline {
             echo "Access your app at http://localhost:8090"
         }
         failure {
-            echo "Pipeline failed. Check the logs."
+            echo "Pipeline failed."
         }
     }
 }
