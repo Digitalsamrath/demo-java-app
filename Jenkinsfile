@@ -141,17 +141,21 @@ pipeline {
         always {
             agent any
             steps {
-            echo "Pipeline finished. Publishing JUnit test reports..."
-            // This finds the test results and displays them in the Jenkins UI
-            junit 'target/surefire-reports/*.xml'
+             echo "Pipeline finished. Publishing JUnit test reports..."
+             // This finds the test results and displays them in the Jenkins UI
+             junit 'target/surefire-reports/*.xml'
             } 
         }
         success {
-            echo "Hooray! Deployed successfully."
-            echo "Access your app at http://localhost:8090"
+            steps {
+             echo "Hooray! Deployed successfully."
+             echo "Access your app at http://localhost:8090"
+            }
         }
         failure {
-            echo "Pipeline failed."
+            steps {
+             echo "Pipeline failed."
+            }
         }
     }
 }
