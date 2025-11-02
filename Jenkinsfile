@@ -1,35 +1,35 @@
 pipeline {
     agent none 
-
+    
     environment {
         DOCKER_HUB_USER = "samrath09" 
     }
-
+    
     stages {
         stage('1. Checkout Code') {
             agent any 
             steps {
                 echo "Fetching code..."
                 checkout scm 
-                // Stash the workspace for later stages
-                stash includes: '**', name: 'source'
             }
         }
-
+        
         stage('2. Build & Unit Test') {
             agent any 
             tools {
                 maven 'Maven-3.9'
             }
             steps {
-                echo "Running Maven build, JUnit tests, and JaCoCo coverage..."
-                unstash 'source'
+                echo "Running Maven build..."
                 sh "mvn clean verify"
-                // Stash test results for post section
+                
+                // Stash the build artifacts (the jar and test reports)
+                echo "Stashing artifacts..."
+                stash includes: 'target/demo-0.0.1-SNAPSHOT.jar', name: 'app-jar'
                 stash includes: 'target/surefire-reports/*.xml', name: 'test-reports', allowEmpty: true
             }
         }
-
+        
         stage('3. Build Docker Image') {
             agent {
                 docker {
@@ -39,12 +39,16 @@ pipeline {
             }
             steps {
                 echo "Building Docker Image..."
-                unstash 'source'
+                
+                // Unstash the jar - creates 'target' folder with .jar inside
+                unstash 'app-jar'
+                
+                // Now the Dockerfile can find the jar
                 sh "docker build -t ${env.DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER} ."
                 sh "docker tag ${env.DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER} ${env.DOCKER_HUB_USER}/my-java-app:latest"
             }
         }
-
+        
         stage('4. Push to Docker Hub') {
             agent {
                 docker {
@@ -61,7 +65,7 @@ pipeline {
                 }
             }
         }
-
+        
         stage('5. Deploy (Local Simulation)') {
             agent {
                 docker {
@@ -71,20 +75,17 @@ pipeline {
             }
             steps {
                 echo "Deploying container locally..."
-                sh """
-                    docker stop my-app || true
-                    docker rm my-app || true
-                    docker run -d --name my-app -p 8090:8080 ${env.DOCKER_HUB_USER}/my-java-app:latest
-                """
+                sh "docker stop my-app || true"
+                sh "docker rm my-app || true"
+                sh "docker run -d --name my-app -p 8090:8080 ${env.DOCKER_HUB_USER}/my-java-app:latest"
             }
         }
     }
-
+    
     post {
         always {
             node('') {
                 echo "Pipeline finished. Publishing JUnit test reports..."
-                // Unstash test reports from stage 2
                 unstash 'test-reports'
                 junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
             }
