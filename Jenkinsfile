@@ -98,25 +98,17 @@ pipeline {
 
     post {
         always {
-            // 3. THIS IS THE FIX. 'agent' and 'steps' are correct.
-            agent any
-            steps {
+            node('') {
                 echo "Pipeline finished. Publishing JUnit test reports..."
                 junit 'target/surefire-reports/*.xml' 
             }
         }
         success {
-            // 4. THIS IS ALSO THE FIX.
-            steps {
-                echo "Hooray! Deployed successfully."
-                echo "Access your app at http://localhost:8090"
-            }
+            echo "Hooray! Deployed successfully."
+            echo "Access your app at http://localhost:8090"
         }
         failure {
-            // 5. AND THIS IS THE FIX.
-            steps {
-                echo "Pipeline failed."
-            }
+            echo "Pipeline failed."
         }
     }
 }
