@@ -1,10 +1,5 @@
 pipeline {
-    agent any // Run on the main Jenkins instance
-
-    tools {
-        // This name MUST exactly match what we set up in Jenkins later
-        maven 'Maven-3.9' 
-    }
+    agent none // Run on the main Jenkins instance
 
     environment {
         /*
@@ -25,17 +20,24 @@ pipeline {
 
     stages {
         stage('1. Checkout Code') {
+            // 2. This stage will run on the default Jenkins node
+            agent any 
             steps {
                 echo "Fetching code..."
-                // This will be your repo's URL
-                git branch: 'main', url: 'https://github.com/Digitalsamrath/demo-java-app.git' // <-- 2. UPDATE THIS
+                // This is the standard way to check out the code
+                // that the pipeline is linked to.
+                checkout scm 
             }
         }
 
         stage('2. Build & Unit Test') {
+            // 3. This stage also runs on the default node
+            agent any 
+            tools {
+                maven 'Maven-3.9' // Uses the tool we configured
+            }
             steps {
                 echo "Running Maven build, JUnit tests, and JaCoCo coverage..."
-                // 'verify' runs the build, tests, AND the jacoco report all in one
                 sh "mvn clean verify" 
             }
         }
@@ -78,60 +80,71 @@ pipeline {
         }
         */
 
-        stage('3. Build Docker Image') { // Renumbered from 6
+        stage('3. Build Docker Image') { // Renumbered
+            // 4. THIS IS THE FIX: This stage runs inside a
+            //    special container that *only* has the Docker CLI.
+            agent {
+                docker {
+                    image 'docker:26-cli' // A small, official image with just Docker tools
+                    // This is the magic: it connects this container
+                    // to our host's Docker engine.
+                    args '-v /var/run/docker.sock:/var/run/docker.sock' 
+                }
+            }
             steps {
                 echo "Building Docker Image..."
-                script {
-                    // This uses the Docker Pipeline plugin's 'docker.build()' command
-                    def customImage = docker.build("${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER}", ".")
-                    customImage.tag("${DOCKER_HUB_USER}/my-java-app:latest")
-                }
+                // 5. Now that we're on a Docker-enabled agent,
+                //    we can use the simple 'sh' commands again!
+                sh "docker build -t ${env.DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER} ."
+                sh "docker tag ${env.DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER} ${env.DOCKER_HUB_USER}/my-java-app:latest"
             }
         }
 
-        stage('4. Push to Docker Hub') { // Renumbered from 7
+        stage('4. Push to Docker Hub') { // Renumbered
+            // 6. This stage ALSO needs the Docker agent
+            agent {
+                docker {
+                    image 'docker:26-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
             steps {
                 echo "Pushing image to Docker Hub..."
-                script {
-                    // This tells the plugin to use our 'dockerhub-creds' for the Docker Hub registry
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-creds') {
-                        
-                        // Push the build-number tag
-                        docker.image("${DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER}").push()
-                        
-                        // Push the 'latest' tag
-                        docker.image("${DOCKER_HUB_USER}/my-java-app:latest").push()
-                    }
+                // Use the credentials we stored in Jenkins
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKK_PASS', usernameVariable: 'DOCKER_USER')]) {
+                    sh "docker login -u ${DOCKER_USER} -p ${DOCKK_PASS}"
+                    sh "docker push ${env.DOCKER_HUB_USER}/my-java-app:${BUILD_NUMBER}"
+                    sh "docker push ${env.DOCKER_HUB_USER}/my-java-app:latest"
                 }
             }
         }
 
-        stage('5. Deploy (Local Simulation)') { // Renumbered from 8
+        stage('5. Deploy (Local Simulation)') { // Renumbered
+            // 7. This stage ALSO needs the Docker agent
+            agent {
+                docker {
+                    image 'docker:26-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
             steps {
                 echo "Deploying container locally..."
-                script {
-                    // We need a 'try/catch' because stopping/removing a container
-                    // that doesn't exist will throw an error.
-                    try {
-                        def oldContainer = docker.container('my-app')
-                        oldContainer.stop()
-                        oldContainer.rm()
-                    } catch (e) {
-                        echo "No old 'my-app' container found. Moving on."
-                    }
-                    
-                    // Now, use the plugin to run the new container
-                    docker.image("${DOCKER_HUB_USER}/my-java-app:latest").run("-d -p 8090:8080 --name my-app")
-                }
+                sh "docker stop my-app || true"
+                sh "docker rm my-app || true"
+                sh "docker run -d --name my-app -p 8090:8080 ${env.DOCKER_HUB_USER}/my-java-app:latest"
             }
         }
     }
+    
 
     post {
         always {
+            agent any
+            steps {
             echo "Pipeline finished. Publishing JUnit test reports..."
             // This finds the test results and displays them in the Jenkins UI
-            junit 'target/surefire-reports/*.xml' 
+            junit 'target/surefire-reports/*.xml'
+            } 
         }
         success {
             echo "Hooray! Deployed successfully."
